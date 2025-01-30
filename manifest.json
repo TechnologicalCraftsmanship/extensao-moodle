@@ -3,16 +3,10 @@
   "name": "Moodle Calendar Sync",
   "version": "1.0",
   "permissions": [
-    "cookies",
     "identity",
-    "scripting",
-    "activeTab",
-    "webRequest",
-    "webNavigation",
-    "debugger",
-    "webRequestBlocking",
+    "cookies",
     "storage",
-    "https://www.googleapis.com/*"
+    "webRequest"
   ],
   "host_permissions": [
     "https://moodle.utfpr.edu.br/*",
