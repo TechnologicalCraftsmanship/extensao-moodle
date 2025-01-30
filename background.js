@@ -178,6 +178,9 @@ async function createGoogleEvents(events, accessToken) {
   try {
     // Process events in batches to avoid rate limiting
     const BATCH_SIZE = 10;
+    let successCount = 0;
+    let errorCount = 0;
+
     for (let i = 0; i < events.length; i += BATCH_SIZE) {
       const batch = events.slice(i, i + BATCH_SIZE);
       
@@ -199,17 +202,25 @@ async function createGoogleEvents(events, accessToken) {
 
           if (!response.ok) {
             const errorData = await response.json();
-            console.error('Event creation failed:', errorData);
+            console.error('[Google API] Event creation failed:', event.summary, errorData);
+            errorCount++;
             throw new Error(`Google API error: ${errorData.error?.message || 'Unknown error'}`);
           }
 
-          return await response.json();
+          const result = await response.json();
+          console.log('[Google API] Event created:', event.summary, `ID: ${result.id}`);
+          successCount++;
+          return result;
+
         } catch (error) {
-          console.error('Failed to create event:', event.summary, error);
+          console.error('[Google API] Failed to create event:', event.summary, error);
+          errorCount++;
           throw error; // Re-throw to stop execution on critical errors
         }
       }));
     }
+
+    console.log(`[Google API] Batch complete. Success: ${successCount}, Errors: ${errorCount}`);
   } catch (error) {
     throw new Error(`Event creation failed: ${error.message}`);
   }
