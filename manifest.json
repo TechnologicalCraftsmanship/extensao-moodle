@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Moodle Calendar Sync",
+  "version": "1.0",
+  "permissions": [
+    "cookies",
+    "identity",
+    "https://www.googleapis.com/*"
+  ],
+  "host_permissions": [
+    "https://moodle.utfpr.edu.br/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "oauth2": {
+    "client_id": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/calendar"]
+  }
+} 
