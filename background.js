@@ -24,7 +24,7 @@ async function syncMoodleEvents(dates) {
 }
 
 async function fetchMoodleData(sessionCookie) {
-  const response = await fetch('https://moodle.utfpr.edu.br/lib/ajax/service.php?sesskey=8mPdcdhDh6&info=block_recentlyaccesseditems_get_recent_items', {
+  const response = await fetch(`https://moodle.utfpr.edu.br/lib/ajax/service.php?sesskey=${sessionCookie}&info=core_calendar_get_calendar_monthly_view`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -32,34 +32,46 @@ async function fetchMoodleData(sessionCookie) {
     },
     body: JSON.stringify([{
       index: 0,
-      methodname: 'block_recentlyaccesseditems_get_recent_items',
-      args: { limit: 9 }
+      methodname: 'core_calendar_get_calendar_monthly_view',
+      args: {
+        year: "2025",
+        month: "2",
+        courseid: 1,
+        day: 1,
+        view: "month"
+      }
     }])
   });
   return response.json();
 }
 
 function processEvents(data, dates) {
-  // Ensure response structure matches expectations
-  if (!data || !data[0] || !data[0].data) return [];
+  // Handle Moodle's nested response structure
+  if (!data || !data[0] || !data[0].data?.weeks) return [];
   
-  return data[0].data.map(event => ({
-    summary: event.name,
-    start: { 
-      dateTime: new Date(event.timeaccess * 1000).toISOString(),
-      timeZone: 'America/Sao_Paulo'  // Add timezone for Brazil
-    },
-    end: {
-      dateTime: new Date(event.timeaccess * 1000 + 3600000).toISOString(), // 1 hour duration
-      timeZone: 'America/Sao_Paulo'
-    },
-    description: `Course: ${event.coursename}\nType: ${event.modname}\nURL: ${event.viewurl}`
-  })).filter(event => {
+  // Extract events from all weeks and days
+  const allEvents = data[0].data.weeks.flatMap(week => 
+    week.days.flatMap(day => 
+      day.events.map(event => ({
+        summary: event.name,
+        start: {
+          dateTime: new Date(event.timestart * 1000).toISOString(),
+          timeZone: 'America/Sao_Paulo'
+        },
+        end: {
+          dateTime: new Date((event.timestart + event.timeduration) * 1000).toISOString(),
+          timeZone: 'America/Sao_Paulo'
+        },
+        description: `Course: ${event.course?.fullname || 'No course'}\n${event.description}\nURL: ${event.url}`
+      }))
+    )
+  );
+
+  // Filter events within date range
+  return allEvents.filter(event => {
     const eventDate = new Date(event.start.dateTime);
     const startDate = new Date(dates.start);
     const endDate = new Date(dates.end);
-    
-    // Include whole day range for end date
     endDate.setHours(23, 59, 59, 999);
     
     return eventDate >= startDate && eventDate <= endDate;
