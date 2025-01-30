@@ -5,10 +5,20 @@
   "permissions": [
     "cookies",
     "identity",
+    "scripting",
+    "activeTab",
+    "webRequest",
+    "webNavigation",
+    "debugger",
+    "webRequestBlocking",
+    "storage",
     "https://www.googleapis.com/*"
   ],
   "host_permissions": [
-    "https://moodle.utfpr.edu.br/*"
+    "https://moodle.utfpr.edu.br/*",
+    "https://www.googleapis.com/*",
+    "https://accounts.google.com/*",
+    "https://www.googleapis.com/calendar/v3/*"
   ],
   "action": {
     "default_popup": "popup.html"
@@ -17,7 +27,15 @@
     "service_worker": "background.js"
   },
   "oauth2": {
-    "client_id": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "560185377989-5554ln9rbnlpdca0gr3mooenkeri0tuk.apps.googleusercontent.com",
     "scopes": ["https://www.googleapis.com/auth/calendar"]
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://moodle.utfpr.edu.br/*"],
+      "js": ["moodle-content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
 } 
