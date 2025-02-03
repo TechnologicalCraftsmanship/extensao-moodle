@@ -1,12 +1,25 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sync Moodle to Google Calendar</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
 <body>
-  <div style="padding: 10px;">
-    <input type="date" id="startDate">
-    <input type="date" id="endDate">
-    <button id="syncButton">Sync to Calendar</button>
-    <div id="status"></div>
-  </div>
-  <script src="popup.js"></script>
+    <div class="container">
+        <h2>Sincronizar Eventos do Moodle</h2>
+        <label for="startDate">Data Inicial</label>
+        <input type="date" id="startDate">
+
+        <label for="endDate">Data Final</label>
+        <input type="date" id="endDate">
+
+        <button id="syncButton">Sincronizar</button>
+
+        <div id="status"></div>
+    </div>
+
+    <script src="popup.js"></script>
 </body>
-</html> 
+</html>
