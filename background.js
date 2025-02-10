@@ -124,30 +124,19 @@ function processEvents(monthlyData, dates) {
     return monthData[0].data.weeks.flatMap(week => 
       week.days.flatMap(day => 
         day.events.map(event => {
-          const formatOptions = {
-            timeZone: 'America/Sao_Paulo',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-          };
-          
-          // Format dates with explicit timezone offset
-          const startDate = new Date(event.timestart * 1000).toLocaleString('en-US', formatOptions);
-          const endDate = new Date((event.timestart + event.timeduration) * 1000).toLocaleString('en-US', formatOptions);
+          // Create dates directly in the correct timezone
+          const startDate = new Date(event.timestart * 1000);
+          const endDate = new Date((event.timestart + event.timeduration) * 1000);
           
           return {
             summary: event.name,
             location: event.location || '',
             start: {
-              dateTime: `${startDate.slice(6,10)}-${startDate.slice(0,2)}-${startDate.slice(3,5)}T${startDate.slice(12)}`,
+              dateTime: startDate.toISOString(),
               timeZone: 'America/Sao_Paulo'
             },
             end: {
-              dateTime: `${endDate.slice(6,10)}-${endDate.slice(0,2)}-${endDate.slice(3,5)}T${endDate.slice(12)}`,
+              dateTime: endDate.toISOString(),
               timeZone: 'America/Sao_Paulo'
             },
             description: `Course: ${event.course?.fullname || 'No course'}\n
@@ -175,54 +164,101 @@ function processEvents(monthlyData, dates) {
 }
 
 async function createGoogleEvents(events, accessToken) {
-  try {
-    // Process events in batches to avoid rate limiting
-    const BATCH_SIZE = 10;
-    let successCount = 0;
-    let errorCount = 0;
+  const BATCH_SIZE = 10;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 1000;
+  let successCount = 0;
+  let errorCount = 0;
+  const failedEvents = [];
 
+  // Validate event object
+  const validateEvent = (event) => {
+    if (!event.summary) throw new Error('Event must have a summary');
+    if (!event.start?.dateTime) throw new Error('Event must have a start date');
+    if (!event.end?.dateTime) throw new Error('Event must have an end date');
+    return true;
+  };
+
+  // Helper function to create a single event with retries
+  const createSingleEvent = async (event, retryCount = 0) => {
+    try {
+      validateEvent(event);
+      
+      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...event,
+          reminders: {
+            useDefault: true
+          }
+        })
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Unknown error';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error?.message || errorMessage;
+        } catch (e) {
+          // If response is not JSON, try to get text
+          errorMessage = await response.text();
+        }
+
+        throw new Error(`Google API error: ${errorMessage}`);
+      }
+
+      const result = await response.json();
+      console.log('[Google API] Event created:', event.summary, `ID: ${result.id}`);
+      successCount++;
+      return result;
+
+    } catch (error) {
+      if (retryCount < MAX_RETRIES) {
+        console.log(`Retrying event creation for "${event.summary}" (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+        return createSingleEvent(event, retryCount + 1);
+      }
+      
+      console.error('[Google API] Failed to create event after retries:', event.summary, error);
+      errorCount++;
+      failedEvents.push({ event, error: error.message });
+      return null;
+    }
+  };
+
+  try {
+    // Process events in batches
     for (let i = 0; i < events.length; i += BATCH_SIZE) {
       const batch = events.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(event => createSingleEvent(event))
+      );
       
-      await Promise.all(batch.map(async (event) => {
-        try {
-          const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              ...event,
-              reminders: {
-                useDefault: true
-              }
-            })
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            console.error('[Google API] Event creation failed:', event.summary, errorData);
-            errorCount++;
-            throw new Error(`Google API error: ${errorData.error?.message || 'Unknown error'}`);
-          }
-
-          const result = await response.json();
-          console.log('[Google API] Event created:', event.summary, `ID: ${result.id}`);
-          successCount++;
-          return result;
-
-        } catch (error) {
-          console.error('[Google API] Failed to create event:', event.summary, error);
-          errorCount++;
-          throw error; // Re-throw to stop execution on critical errors
-        }
-      }));
+      // Log batch progress
+      console.log(`[Google API] Batch progress: ${i + batch.length}/${events.length} events processed`);
     }
 
-    console.log(`[Google API] Batch complete. Success: ${successCount}, Errors: ${errorCount}`);
+    const summary = {
+      total: events.length,
+      successful: successCount,
+      failed: errorCount,
+      failedEvents: failedEvents
+    };
+
+    console.log('[Google API] Sync complete:', summary);
+    
+    if (errorCount > 0) {
+      throw new Error(`Event creation partially failed. ${errorCount} events failed to sync.`);
+    }
+
+    return summary;
   } catch (error) {
-    throw new Error(`Event creation failed: ${error.message}`);
+    console.error('[Google API] Sync failed:', error);
+    throw error;
   }
 }
 
