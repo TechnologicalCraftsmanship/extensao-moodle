@@ -57,8 +57,41 @@ button:hover {
     background-color: #373057;
 }
 
+button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
 #status {
     margin-top: 10px;
     font-size: 14px;
-    color: #333;
+    padding: 8px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+#status.success {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #a5d6a7;
+}
+
+#status.error {
+    background-color: #ffebee;
+    color: #c62828;
+    border: 1px solid #ffcdd2;
+}
+
+#status.partial {
+    background-color: #fff3e0;
+    color: #ef6c00;
+    border: 1px solid #ffe0b2;
+}
+
+.sync-details {
+    margin-top: 8px;
+    font-size: 12px;
+    padding: 6px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
 }

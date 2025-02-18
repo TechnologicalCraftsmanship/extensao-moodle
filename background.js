@@ -4,16 +4,51 @@ let sesskeyRetries = 0;
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'syncEvents') {
     syncMoodleEvents(request.dates)
-      .then(() => sendResponse({ message: 'Sync successful!' }))
-      .catch(error => sendResponse({ message: `Error: ${error.message}` }));
+      .then((result) => {
+        if (result && result.failedEvents && result.failedEvents.length > 0) {
+          sendResponse({
+            status: 'partial',
+            message: `Sync partially complete. ${result.successful} events added, ${result.failed} failed.`,
+            details: result
+          });
+        } else {
+          sendResponse({
+            status: 'success',
+            message: 'Sync successful!',
+            details: result
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Sync error:', error);
+        let errorMessage = error.message;
+        
+        // Provide more specific error messages
+        if (errorMessage.includes('OAuth')) {
+          errorMessage = 'Google Calendar authentication failed. Please try again.';
+        } else if (errorMessage.includes('token')) {
+          errorMessage = 'Session expired. Please refresh the page and try again.';
+        } else if (errorMessage.includes('quota')) {
+          errorMessage = 'Google Calendar API limit reached. Please try again later.';
+        }
+        
+        sendResponse({
+          status: 'error',
+          message: `Error: ${errorMessage}`,
+          details: error
+        });
+      });
     return true; // Keep message channel open for async response
   }
   if (request.action === 'getSesskey') {
-    getMoodleSesskey().then(sesskey => sendResponse({ sesskey }))
+    getMoodleSesskey()
+      .then(sesskey => sendResponse({ status: 'success', sesskey }))
+      .catch(error => sendResponse({ status: 'error', message: error.message }));
     return true;
   }
   if (request.type === 'NEW_SESSKEY') {
     currentSesskey = request.sesskey;
+    sesskeyRetries = 0; // Reset retries when new sesskey is received
   }
 });
 
@@ -52,13 +87,36 @@ async function syncMoodleEvents(dates) {
   // Process and filter events
   const allEvents = processEvents(monthlyData.flat(), dates);
   
-  // Proper OAuth flow for Chrome extensions
-  const { token } = await chrome.identity.getAuthToken({
-    interactive: true
-  });
+  // Enhanced OAuth flow with proper error handling
+  let token;
+  try {
+    const authResult = await chrome.identity.getAuthToken({
+      interactive: true
+    });
+    token = authResult.token;
 
-  if (!token) {
-    throw new Error('Failed to obtain Google OAuth token');
+    if (!token) {
+      throw new Error('Failed to obtain Google OAuth token');
+    }
+
+    // Validate token
+    const tokenValidation = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!tokenValidation.ok) {
+      console.log('Invalid token, attempting refresh...');
+      await chrome.identity.removeCachedAuthToken({ token });
+      const newAuthResult = await chrome.identity.getAuthToken({
+        interactive: true,
+        force: true
+      });
+      token = newAuthResult.token;
+    }
+  } catch (error) {
+    console.error('OAuth error:', error);
+    throw new Error(`Google authentication failed: ${error.message}`);
   }
 
   await createGoogleEvents(allEvents, token);
@@ -170,6 +228,24 @@ async function createGoogleEvents(events, accessToken) {
   let successCount = 0;
   let errorCount = 0;
   const failedEvents = [];
+
+  // Validate and refresh token if needed
+  try {
+    const tokenInfo = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    
+    if (!tokenInfo.ok) {
+      console.log('Token invalid or expired, refreshing...');
+      await chrome.identity.removeCachedAuthToken({ token: accessToken });
+      const { token } = await chrome.identity.getAuthToken({ interactive: true, force: true });
+      return createGoogleEvents(events, token);
+    }
+  } catch (error) {
+    console.error('Token validation failed:', error);
+    throw new Error('Failed to validate Google token: ' + error.message);
+  }
 
   // Validate event object
   const validateEvent = (event) => {
