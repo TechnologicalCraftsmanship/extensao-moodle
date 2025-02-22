@@ -72,7 +72,7 @@ async function syncMoodleEvents(dates) {
   while (current <= endDate) {
     monthsToFetch.push({
       year: current.getFullYear(),
-      month: current.getMonth() + 1 // Months are 0-based in JS
+      month: current.getMonth() + 2 // Months are 0-based in JS
     });
     current.setMonth(current.getMonth() + 1);
   }
