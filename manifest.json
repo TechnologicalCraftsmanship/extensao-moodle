@@ -22,7 +22,7 @@
     "service_worker": "background.js"
   },
   "oauth2": {
-    "client_id": "560185377989-5554ln9rbnlpdca0gr3mooenkeri0tuk.apps.googleusercontent.com",
+    "client_id": "560185377989-g2u9777irek92eedlfabsp0q0fac4k22.apps.googleusercontent.com",
     "scopes": ["https://www.googleapis.com/auth/calendar.events"]
   },
   "content_scripts": [
