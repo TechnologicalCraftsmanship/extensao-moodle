@@ -90,33 +90,61 @@ async function syncMoodleEvents(dates) {
   // Enhanced OAuth flow with proper error handling
   let token;
   try {
-    const authResult = await chrome.identity.getAuthToken({
-      interactive: true
+    // Request calendar access with a clear prompt
+    token = await new Promise((resolve, reject) => {
+      chrome.identity.getAuthToken({
+        interactive: true,
+        scopes: ['https://www.googleapis.com/auth/calendar.events']
+      }, function(token) {
+        if (chrome.runtime.lastError) {
+          console.error('Auth error:', chrome.runtime.lastError);
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(token);
+      });
+    }).catch(error => {
+      console.error('Initial auth error:', error);
+      throw new Error('Could not access Google Calendar. Please ensure you are signed into Chrome with your Google account and try again.');
     });
-    token = authResult.token;
 
     if (!token) {
-      throw new Error('Failed to obtain Google OAuth token');
+      throw new Error('Failed to obtain Calendar access. Please try again and make sure to approve the access request.');
     }
 
-    // Validate token
-    const tokenValidation = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo', {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    // Validate token by making a request to tokeninfo endpoint
+    const tokenValidation = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${token}`);
 
     if (!tokenValidation.ok) {
       console.log('Invalid token, attempting refresh...');
       await chrome.identity.removeCachedAuthToken({ token });
-      const newAuthResult = await chrome.identity.getAuthToken({
+      token = await chrome.identity.getAuthToken({
         interactive: true,
         force: true
       });
-      token = newAuthResult.token;
     }
   } catch (error) {
     console.error('OAuth error:', error);
-    throw new Error(`Google authentication failed: ${error.message}`);
+    
+    // Handle specific OAuth errors
+    if (error.message.includes('user did not approve access')) {
+      throw new Error(
+        'Calendar access was not approved. Please:\n' +
+        '1. Click the extension icon\n' +
+        '2. Click "Settings"\n' +
+        '3. Click "Reset Google Calendar Access"\n' +
+        '4. Try syncing again and approve the Google Calendar access request'
+      );
+    }
+    
+    if (error.message.includes('OAuth2 not granted or revoked')) {
+      await chrome.identity.removeCachedAuthToken({ token });
+      throw new Error(
+        'Calendar permissions have been revoked. Please try syncing again and approve the access request.'
+      );
+    }
+    
+    throw new Error(`Google Calendar authentication failed. Please ensure you're signed into Chrome with your Google account and try again. Error: ${error.message}`);
   }
 
   await createGoogleEvents(allEvents, token);
@@ -209,7 +237,7 @@ function processEvents(monthlyData, dates) {
       )
     );
   });
-
+  console.log('All events:', allEvents);
   // Filter events to selected date range
   const start = new Date(dates.start);
   const end = new Date(dates.end);
@@ -231,16 +259,25 @@ async function createGoogleEvents(events, accessToken) {
 
   // Validate and refresh token if needed
   try {
-    const tokenInfo = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo', {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
+    const tokenInfo = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${accessToken}`);
     
     if (!tokenInfo.ok) {
       console.log('Token invalid or expired, refreshing...');
       await chrome.identity.removeCachedAuthToken({ token: accessToken });
-      const { token } = await chrome.identity.getAuthToken({ interactive: true, force: true });
-      return createGoogleEvents(events, token);
+      const newToken = await new Promise((resolve, reject) => {
+        chrome.identity.getAuthToken({
+          interactive: true,
+          force: true,
+          scopes: ['https://www.googleapis.com/auth/calendar.events']
+        }, function(token) {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          resolve(token);
+        });
+      });
+      return createGoogleEvents(events, newToken);
     }
   } catch (error) {
     console.error('Token validation failed:', error);

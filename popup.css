@@ -95,3 +95,30 @@ button:disabled {
     background-color: rgba(0, 0, 0, 0.05);
     border-radius: 3px;
 }
+
+hr {
+    margin: 20px 0;
+    border: none;
+    border-top: 1px solid #eee;
+}
+
+.settings {
+    text-align: left;
+    padding-top: 10px;
+}
+
+.settings h3 {
+    color: #333;
+    font-size: 16px;
+    margin-bottom: 15px;
+}
+
+#resetAuth {
+    background-color: #dc3545;
+    font-size: 14px;
+    padding: 8px;
+}
+
+#resetAuth:hover {
+    background-color: #c82333;
+}
