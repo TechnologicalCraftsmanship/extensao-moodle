@@ -87,6 +87,8 @@ async function syncMoodleEvents(dates) {
   // Process and filter events
   const allEvents = processEvents(monthlyData.flat(), dates);
   
+  console.log('Events to be added:', allEvents);
+
   // Enhanced OAuth flow with proper error handling
   let token;
   try {
@@ -206,10 +208,10 @@ async function fetchMoodleData(sessionCookie, sesskey, year, month) {
 function processEvents(monthlyData, dates) {
   // Extract events from all months
   const allEvents = monthlyData.flatMap(monthData => {
-    if (!monthData?.[0]?.data?.weeks) return [];
-    return monthData[0].data.weeks.flatMap(week => 
+    if (!monthData?.data?.weeks) return [];
+    return monthData.data.weeks.flatMap(week => 
       week.days.flatMap(day => 
-        day.events.map(event => {
+        (day.events || []).map(event => {
           // Create dates directly in the correct timezone
           const startDate = new Date(event.timestart * 1000);
           const endDate = new Date((event.timestart + event.timeduration) * 1000);
