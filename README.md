@@ -30,3 +30,6 @@ Sinta-se à vontade para enviar problemas e solicitações de melhorias.
 ## Licença
 
 Este projeto está licenciado sob a Licença MIT - consulte o arquivo LICENSE para obter detalhes
+
+## Observação
+O client id da API do Google Calendar está configurado apenas para equipe de desenvolvimento, caso necessário criar sua própria chave ou alterar por uma publicada e revisada pelo google no manifest.sjon
