@@ -157,74 +157,20 @@ async function syncMoodleEvents(dates) {
 
 async function loadCoursesPage() {
   return new Promise((resolve, reject) => {
-    // Reset sesskey state
-    currentSesskey = null;
-    sesskeyRetries = 0;
-    
-    let timeoutId;
-    
-    // Create a listener for sesskey capture
-    const sesskeyListener = (request) => {
-      if (request.type === 'NEW_SESSKEY' && request.sesskey) {
-        chrome.runtime.onMessage.removeListener(sesskeyListener);
-        clearTimeout(timeoutId);
-        resolve();
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      if (!tabs[0]) {
+        reject(new Error('No active tab found'));
+        return;
       }
-    };
-    
-    chrome.runtime.onMessage.addListener(sesskeyListener);
-    
-    chrome.tabs.create(
-      {
-        url: 'https://moodle.utfpr.edu.br/my/courses.php',
-        active: false
-      },
-      (tab) => {
-        // Listen for the tab to complete loading
-        const listener = (tabId, changeInfo) => {
-          if (tabId === tab.id && changeInfo.status === 'complete') {
-            // Keep checking for sesskey for up to 30 seconds after page load
-            let checkAttempts = 0;
-            const checkInterval = setInterval(() => {
-              console.log('Checking for sesskey, attempt:', checkAttempts);
-              if (currentSesskey) {
-                console.log('Sesskey found:', currentSesskey);
-                clearInterval(checkInterval);
-                chrome.tabs.onUpdated.removeListener(listener);
-                // Wait 2 seconds before closing the tab to ensure content script completes
-                setTimeout(() => {
-                  chrome.tabs.remove(tab.id);
-                  resolve();
-                }, 2000);
-              } else if (checkAttempts >= 60) { // 60 attempts * 500ms = 30 seconds
-                clearInterval(checkInterval);
-                chrome.tabs.onUpdated.removeListener(listener);
-                chrome.tabs.remove(tab.id);
-                reject(new Error('Failed to capture sesskey from courses page'));
-              }
-              checkAttempts++;
-            }, 500);
-          }
-        };
-        
-        chrome.tabs.onUpdated.addListener(listener);
-        
-        // Set a timeout to prevent hanging
-        timeoutId = setTimeout(() => {
-          chrome.runtime.onMessage.removeListener(sesskeyListener);
-          chrome.tabs.onUpdated.removeListener(listener);
-          chrome.tabs.remove(tab.id);
-          reject(new Error(`Timeout while loading courses page. Please check:
-            1. Your internet connection
-            2. You are logged into Moodle
-            3. The Moodle site is responding
-            
-            If the problem persists, try manually visiting
-            https://moodle.utfpr.edu.br/my/courses.php
-            and then try syncing again.`));
-        }, 30000); // Increased timeout to 30 seconds
-      }
-    );
+      
+      // Simply redirect to the courses page
+      chrome.tabs.update(tabs[0].id, {
+        url: 'https://moodle.utfpr.edu.br/my/courses.php'
+      }, () => {
+        // Give a small delay for the redirect to start
+        setTimeout(resolve, 500);
+      });
+    });
   });
 }
 
