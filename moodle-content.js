@@ -1,6 +1,60 @@
 // Add at the top of the content script
 console.log('Moodle content script loaded');
 
+// Extract sesskey from page content
+const extractSesskeyFromPage = () => {
+    // Try to find sesskey in M.cfg.sesskey (Moodle's JavaScript configuration)
+    if (window.M && M.cfg && M.cfg.sesskey) {
+        console.log('Found sesskey in M.cfg:', M.cfg.sesskey);
+        return M.cfg.sesskey;
+    }
+
+    // Try to find sesskey in any script tags containing config
+    const scripts = document.querySelectorAll('script');
+    for (const script of scripts) {
+        const match = script.textContent.match(/(?:sesskey["']?\s*:\s*["']([a-zA-Z0-9]+)["'])/);
+        if (match && match[1]) {
+            console.log('Found sesskey in script tag:', match[1]);
+            return match[1];
+        }
+    }
+
+    // Try to find sesskey in any form inputs
+    const sesskeyInput = document.querySelector('input[name="sesskey"]');
+    if (sesskeyInput && sesskeyInput.value) {
+        console.log('Found sesskey in form input:', sesskeyInput.value);
+        return sesskeyInput.value;
+    }
+
+    return null;
+};
+
+// Function to send sesskey to background script
+const sendSesskey = (sesskey) => {
+    if (sesskey) {
+        chrome.runtime.sendMessage({
+            type: 'NEW_SESSKEY',
+            sesskey: sesskey
+        });
+    }
+};
+
+// Check for sesskey when page loads and after any dynamic content changes
+const checkForSesskey = () => {
+    const sesskey = extractSesskeyFromPage();
+    sendSesskey(sesskey);
+};
+
+// Run on initial page load
+document.addEventListener('DOMContentLoaded', checkForSesskey);
+
+// Monitor DOM changes for dynamically added content
+const observer = new MutationObserver(checkForSesskey);
+observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+});
+
 // Monitor all network requests for sesskey
 (function() {
     const captureSesskey = (request) => {

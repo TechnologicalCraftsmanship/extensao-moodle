@@ -6,7 +6,8 @@
     "identity",
     "cookies",
     "storage",
-    "webRequest"
+    "webRequest",
+    "tabs"
   ],
   "host_permissions": [
     "https://moodle.utfpr.edu.br/*",

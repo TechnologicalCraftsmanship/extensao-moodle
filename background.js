@@ -3,7 +3,10 @@ let sesskeyRetries = 0;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'syncEvents') {
-    syncMoodleEvents(request.dates)
+  // First load the courses page to ensure we have a valid sesskey
+  loadCoursesPage().then(() => {
+    return syncMoodleEvents(request.dates);
+  })
       .then((result) => {
         if (result && result.failedEvents && result.failedEvents.length > 0) {
           sendResponse({
@@ -152,6 +155,79 @@ async function syncMoodleEvents(dates) {
   await createGoogleEvents(allEvents, token);
 }
 
+async function loadCoursesPage() {
+  return new Promise((resolve, reject) => {
+    // Reset sesskey state
+    currentSesskey = null;
+    sesskeyRetries = 0;
+    
+    let timeoutId;
+    
+    // Create a listener for sesskey capture
+    const sesskeyListener = (request) => {
+      if (request.type === 'NEW_SESSKEY' && request.sesskey) {
+        chrome.runtime.onMessage.removeListener(sesskeyListener);
+        clearTimeout(timeoutId);
+        resolve();
+      }
+    };
+    
+    chrome.runtime.onMessage.addListener(sesskeyListener);
+    
+    chrome.tabs.create(
+      {
+        url: 'https://moodle.utfpr.edu.br/my/courses.php',
+        active: false
+      },
+      (tab) => {
+        // Listen for the tab to complete loading
+        const listener = (tabId, changeInfo) => {
+          if (tabId === tab.id && changeInfo.status === 'complete') {
+            // Keep checking for sesskey for up to 30 seconds after page load
+            let checkAttempts = 0;
+            const checkInterval = setInterval(() => {
+              console.log('Checking for sesskey, attempt:', checkAttempts);
+              if (currentSesskey) {
+                console.log('Sesskey found:', currentSesskey);
+                clearInterval(checkInterval);
+                chrome.tabs.onUpdated.removeListener(listener);
+                // Wait 2 seconds before closing the tab to ensure content script completes
+                setTimeout(() => {
+                  chrome.tabs.remove(tab.id);
+                  resolve();
+                }, 2000);
+              } else if (checkAttempts >= 60) { // 60 attempts * 500ms = 30 seconds
+                clearInterval(checkInterval);
+                chrome.tabs.onUpdated.removeListener(listener);
+                chrome.tabs.remove(tab.id);
+                reject(new Error('Failed to capture sesskey from courses page'));
+              }
+              checkAttempts++;
+            }, 500);
+          }
+        };
+        
+        chrome.tabs.onUpdated.addListener(listener);
+        
+        // Set a timeout to prevent hanging
+        timeoutId = setTimeout(() => {
+          chrome.runtime.onMessage.removeListener(sesskeyListener);
+          chrome.tabs.onUpdated.removeListener(listener);
+          chrome.tabs.remove(tab.id);
+          reject(new Error(`Timeout while loading courses page. Please check:
+            1. Your internet connection
+            2. You are logged into Moodle
+            3. The Moodle site is responding
+            
+            If the problem persists, try manually visiting
+            https://moodle.utfpr.edu.br/my/courses.php
+            and then try syncing again.`));
+        }, 30000); // Increased timeout to 30 seconds
+      }
+    );
+  });
+}
+
 async function getMoodleSesskey() {
   console.log('Starting sesskey retrieval attempt', sesskeyRetries);
   
@@ -172,12 +248,12 @@ async function getMoodleSesskey() {
     }
     
     // More detailed error message
-    throw new Error(`Sesskey retrieval failed. Please ensure:
-    1. You're on a Moodle page (https://moodle.utfpr.edu.br)
-    2. You've refreshed the page within the last 2 minutes
-    3. You've clicked the calendar/view events at least once
-    4. The extension has permission to access Moodle
-    5. There are no ad-blockers interfering with requests`);
+    throw new Error(`Failed to get Moodle session key. Please ensure:
+    1. You are logged into Moodle (https://moodle.utfpr.edu.br)
+    2. Your internet connection is stable
+    3. The extension has permission to access Moodle
+    4. There are no ad-blockers or security extensions blocking the request
+    5. Try logging out of Moodle, logging back in, and trying again`);
   }
   
   return currentSesskey;
