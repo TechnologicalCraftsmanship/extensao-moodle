@@ -33,3 +33,8 @@ Este projeto está licenciado sob a Licença MIT - consulte o arquivo LICENSE pa
 
 ## Observação
 O client id da API do Google Calendar está configurado apenas para equipe de desenvolvimento, caso necessário criar sua própria chave ou alterar por uma publicada e revisada pelo google no manifest.sjon
+
+## Links de Tutoriais
+
+- Uso: https://www.loom.com/share/2427f66224194420a328e3b9c8ca3457
+- Instalação: https://www.loom.com/share/1c8db9c7000c49f588c97d0730cc1591
